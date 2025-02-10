@@ -16,10 +16,12 @@ import me.jellysquid.mods.sodium.client.render.chunk.compile.ChunkBuildBuffers;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.buffers.ChunkModelBuilder;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.DefaultMaterials;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
+import me.jellysquid.mods.sodium.client.render.chunk.translucent_sorting.TranslucentGeometryCollector;
 import me.jellysquid.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEncoder;
 import me.jellysquid.mods.sodium.client.world.WorldSlice;
 import me.jellysquid.mods.sodium.client.util.DirectionUtil;
 import net.caffeinemc.mods.sodium.api.util.ColorABGR;
+import net.caffeinemc.mods.sodium.api.util.NormI8;
 import net.fabricmc.fabric.api.client.render.fluid.v1.FluidRenderHandler;
 import net.fabricmc.fabric.api.client.render.fluid.v1.FluidRenderHandlerRegistry;
 import net.minecraft.block.BlockState;
@@ -40,10 +42,14 @@ import net.minecraft.world.BlockRenderView;
 import org.apache.commons.lang3.mutable.MutableFloat;
 import org.apache.commons.lang3.mutable.MutableInt;
 
+/**
+ * The fluid renderer produces the quads for block of fluid. It generates inside
+ * and outside quads for each face of the block.
+ */
 public class FluidRenderer {
-    // TODO: allow this to be changed by vertex format
+    // TODO: allow this to be changed by vertex format, WARNING: make sure TranslucentGeometryCollector knows about EPSILON
     // TODO: move fluid rendering to a separate render pass and control glPolygonOffset and glDepthFunc to fix this properly
-    private static final float EPSILON = 0.001f;
+    public static final float EPSILON = 0.001f;
     private static final float ALIGNED_EQUALS_EPSILON = 0.011f;
 
     private final BlockPos.Mutable scratchPos = new BlockPos.Mutable();
@@ -101,7 +107,7 @@ public class FluidRenderer {
         return Math.abs(a - b) <= ALIGNED_EQUALS_EPSILON;
     }
 
-    public void render(WorldSlice world, FluidState fluidState, BlockPos blockPos, BlockPos offset, ChunkBuildBuffers buffers) {
+    public void render(WorldSlice world, FluidState fluidState, BlockPos blockPos, BlockPos offset, TranslucentGeometryCollector collector, ChunkBuildBuffers buffers) {
         var material = DefaultMaterials.forFluidState(fluidState);
         var meshBuilder = buffers.get(material);
 
@@ -174,13 +180,11 @@ public class FluidRenderer {
             Vec3d velocity = fluidState.getVelocity(world, blockPos);
 
             Sprite sprite;
-            ModelQuadFacing facing;
             float u1, u2, u3, u4;
             float v1, v2, v3, v4;
 
             if (velocity.x == 0.0D && velocity.z == 0.0D) {
                 sprite = sprites[0];
-                facing = ModelQuadFacing.POS_Y;
                 u1 = sprite.getFrameU(0.0D);
                 v1 = sprite.getFrameV(0.0D);
                 u2 = u1;
@@ -191,7 +195,6 @@ public class FluidRenderer {
                 v4 = v1;
             } else {
                 sprite = sprites[1];
-                facing = ModelQuadFacing.UNASSIGNED;
                 float dir = (float) MathHelper.atan2(velocity.z, velocity.x) - (1.5707964f);
                 float sin = MathHelper.sin(dir) * 0.25F;
                 float cos = MathHelper.cos(dir) * 0.25F;
@@ -248,11 +251,11 @@ public class FluidRenderer {
             }
 
             this.updateQuad(quad, world, blockPos, lighter, Direction.UP, 1.0F, colorProvider, fluidState);
-            this.writeQuad(meshBuilder, material, offset, quad, facing, false);
+            this.writeQuad(meshBuilder, collector, material, offset, quad, aligned ? ModelQuadFacing.POS_Y : ModelQuadFacing.UNASSIGNED, false);
 
             if (fluidState.canFlowTo(world, this.scratchPos.set(posX, posY + 1, posZ))) {
-                this.writeQuad(meshBuilder, material, offset, quad,
-                        ModelQuadFacing.NEG_Y, true);
+                this.writeQuad(meshBuilder, collector, material, offset, quad,
+                        aligned ? ModelQuadFacing.NEG_Y : ModelQuadFacing.UNASSIGNED, true);
 
             }
         }
@@ -272,7 +275,7 @@ public class FluidRenderer {
             setVertex(quad, 3, 1.0F, yOffset, 1.0F, maxU, maxV);
 
             this.updateQuad(quad, world, blockPos, lighter, Direction.DOWN, 1.0F, colorProvider, fluidState);
-            this.writeQuad(meshBuilder, material, offset, quad, ModelQuadFacing.NEG_Y, false);
+            this.writeQuad(meshBuilder, collector, material, offset, quad, ModelQuadFacing.NEG_Y, false);
 
         }
 
@@ -373,10 +376,10 @@ public class FluidRenderer {
                 ModelQuadFacing facing = ModelQuadFacing.fromDirection(dir);
 
                 this.updateQuad(quad, world, blockPos, lighter, dir, br, colorProvider, fluidState);
-                this.writeQuad(meshBuilder, material, offset, quad, facing, false);
+                this.writeQuad(meshBuilder, collector, material, offset, quad, facing, false);
 
                 if (!isOverlay) {
-                    this.writeQuad(meshBuilder, material, offset, quad, facing.getOpposite(), true);
+                    this.writeQuad(meshBuilder, collector, material, offset, quad, facing.getOpposite(), true);
                 }
 
             }
@@ -418,7 +421,7 @@ public class FluidRenderer {
         }
     }
 
-    private void writeQuad(ChunkModelBuilder builder, Material material, BlockPos offset, ModelQuadView quad,
+    private void writeQuad(ChunkModelBuilder builder, TranslucentGeometryCollector collector, Material material, BlockPos offset, ModelQuadView quad,
                            ModelQuadFacing facing, boolean flip) {
         var vertices = this.vertices;
 
@@ -438,6 +441,19 @@ public class FluidRenderer {
 
         if (sprite != null) {
             builder.addSprite(sprite);
+        }
+
+        if (material == DefaultMaterials.TRANSLUCENT && collector != null) {
+            int normal;
+            if (facing.isAligned()) {
+                normal = facing.getPackedAlignedNormal();
+            } else {
+                normal = quad.calculateNormal();
+            }
+            if (flip) {
+                normal = NormI8.flipPacked(normal);
+            }
+            collector.appendQuad(normal, vertices, facing);
         }
 
         var vertexBuffer = builder.getVertexBuffer(facing);

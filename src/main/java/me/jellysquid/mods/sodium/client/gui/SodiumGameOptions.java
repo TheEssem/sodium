@@ -5,6 +5,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 import me.jellysquid.mods.sodium.client.gui.options.TextProvider;
+import me.jellysquid.mods.sodium.client.render.chunk.translucent_sorting.SortBehavior;
 import me.jellysquid.mods.sodium.client.util.FileUtil;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.option.GraphicsMode;
@@ -45,6 +46,12 @@ public class SodiumGameOptions {
         public boolean useFogOcclusion = true;
         public boolean useBlockFaceCulling = true;
         public boolean useNoErrorGLContext = true;
+
+        public boolean sortingEnabled = true;
+
+        public SortBehavior getSortBehavior() {
+            return this.sortingEnabled ? SortBehavior.DYNAMIC_DEFER_NEARBY_ONE_FRAME : SortBehavior.OFF;
+        }
     }
 
     public static class AdvancedSettings {

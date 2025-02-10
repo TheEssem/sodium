@@ -1,11 +1,12 @@
 package me.jellysquid.mods.sodium.client.render.chunk.compile.executor;
 
+import me.jellysquid.mods.sodium.client.render.chunk.compile.BuilderTaskOutput;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.ChunkBuildContext;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderTask;
 
 import java.util.function.Consumer;
 
-public class ChunkJobTyped<TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT>
+public class ChunkJobTyped<TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT extends BuilderTaskOutput>
         implements ChunkJob
 {
     private final TASK task;
@@ -64,5 +65,10 @@ public class ChunkJobTyped<TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT>
     @Override
     public boolean isStarted() {
         return this.started;
+    }
+
+    @Override
+    public int getEffort() {
+        return this.task.getEffort();
     }
 }

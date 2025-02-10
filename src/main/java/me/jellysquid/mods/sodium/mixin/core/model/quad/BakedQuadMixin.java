@@ -3,7 +3,6 @@ package me.jellysquid.mods.sodium.mixin.core.model.quad;
 import me.jellysquid.mods.sodium.client.model.quad.BakedQuadView;
 import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFacing;
 import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFlags;
-import me.jellysquid.mods.sodium.client.util.ModelQuadUtil;
 import net.minecraft.client.render.model.BakedQuad;
 import net.minecraft.client.texture.Sprite;
 import net.minecraft.util.math.Direction;
@@ -50,8 +49,8 @@ public class BakedQuadMixin implements BakedQuadView {
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void init(int[] vertexData, int colorIndex, Direction face, Sprite sprite, boolean shade, CallbackInfo ci) {
-        this.normal = ModelQuadUtil.calculateNormal(this);
-        this.normalFace = ModelQuadUtil.findNormalFace(this.normal);
+        this.normal = this.calculateNormal();
+        this.normalFace = ModelQuadFacing.fromPackedNormal(this.normal);
 
         this.flags = ModelQuadFlags.getQuadFlags(this, face);
     }
@@ -104,6 +103,11 @@ public class BakedQuadMixin implements BakedQuadView {
     @Override
     public ModelQuadFacing getNormalFace() {
         return this.normalFace;
+    }
+
+    @Override
+    public int getNormal() {
+        return this.normal;
     }
 
     @Override

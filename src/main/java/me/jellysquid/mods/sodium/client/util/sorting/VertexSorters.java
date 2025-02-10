@@ -1,6 +1,7 @@
 package me.jellysquid.mods.sodium.client.util.sorting;
 
 import com.mojang.blaze3d.systems.VertexSorter;
+
 import org.joml.Vector3f;
 
 public class VertexSorters {
@@ -17,10 +18,14 @@ public class VertexSorters {
 
         @Override
         protected float getKey(Vector3f position) {
+            // requires euclidean distance, manhattan distance doesn't work
             return this.origin.distanceSquared(position);
         }
     }
 
+    /**
+     * Sorts the keys given by the subclass by descending value.
+     */
     private static abstract class AbstractVertexSorter implements VertexSorter {
         @Override
         public final int[] sort(Vector3f[] positions) {
